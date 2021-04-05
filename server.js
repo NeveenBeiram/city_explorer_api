@@ -4,55 +4,141 @@ const express = require('express');
 require('dotenv').config();
 
 const cors = require('cors');
-
+const superagent = require('superagent');
 const server = express();
 
 const PORT = process.env.PORT || 5000;
-
+// let app = express();
+// app.use(cors());
 server.use(cors());
 
-server.get('/',(req,res)=>{
-  res.send('you server is working');
-});
+server.get('/',homeHandler);
+server.get('/location',locationHandler);
+server.get('/weather',weatherHandler);
+server.get('/parks',parksHandler);
 
-server.get('/location',(req,res)=>{
+server.get('*',notFoundHandler);
+
+
+
+function homeHandler(req,res){
+  res.send('you server is working');
+};
+
+//localhost:3030/location?city=amman
+function locationHandler(req,res){
   // res.send('location route')
   // fetch the data from location.json file
-  let geoData = require('./data/location.json');
+  // console.log(req.query);,,,
+  let cityName=req.query.city;
+  // console.log(cityName);,,,
+  // let geoData = require('./data/location.json');
   // console.log(geoData);
-  let locationData = new Location (geoData);
+  // let locationData = new Location (geoData);
+  let GEOCODE_API_KEY=process.env.GEOCODE_API_KEY;
+  let LocURL=`https://us1.locationiq.com/v1/search.php?key=${GEOCODE_API_KEY}&q=${cityName}&format=json`;
   // console.log(locationData);
-  res.send(locationData);
-});
+  // res.send(locationData);
+  superagent.get(LocURL)
+    .then(geoData=>{
+      // console.log(geoData);
+      let gData=geoData.body;
+      const locationData=new Location(cityName,gData);
+      res.send(locationData);
+    })
+    .catch(error =>{
+      console.error(error);
+      res.send(error);
+    });
+};
 
-server.get('/weather',(req,res)=>{
-  let newArr=[];
-  let weatherData = require('./data/weather.json');
-  weatherData.data.forEach(val=>{
-    let wD =new Weather(val);
-    newArr.push(wD);
-  });
-  res.send(newArr);
+function weatherHandler(req,res){
+  // let newArr=[];
+  let cityName=req.query.search_query;
+  let WEATHER_API_KEY=process.env.WEATHER_API_KEY;
+  let WeaURL=`https://api.weatherbit.io/v2.0/forecast/daily?city=${cityName}&key=${WEATHER_API_KEY}`;
+  // let weatherData = require('./data/weather.json');
+  superagent.get(WeaURL)
+    .then(wData=>{
+      // console.log(wData);
+      let wtData=wData.body.data;
+      console.log(wtData);
+      // wtData.forEach(val=>{
+      //   const weatherData=new Weather(val);
+      //   newArr.push(weatherData);
 
-});
+      // });
+      let arr=wtData.map((val)=>{
+        return new Weather(val);
+
+      });
+      res.send(arr);
+    })
+    .catch(error=>{
+      res.send(error);
+    });
+
+  // weatherData.data.forEach(val=>{
+  //   let wD =new Weather(val);
+  //   newArr.push(wD);
+  // });
+  // res.send(newArr);
+
+};
+
+
+/*park*/
+function parksHandler(req,res){
+  let city= req.query.search_query;
+  // let parkCode=req.query.id;
+  let PARKS_API_KEY=process.env.PARKS_API_KEY;
+  let parkURL= `https://developer.nps.gov/api/v1/parks?q=${city}&api_key=${PARKS_API_KEY}`; //`https://developer.nps.gov/api/v1/parks?parkCode=${parkCode}&api_key=${PARKS_API_KEY}`;
+
+  superagent.get(parkURL)
+    .then(pData=>{
+      // console.log(pData);
+      let parData=pData.body.data;
+
+      let arr=parData.map((val)=>{
+        return new Park(val);
+
+      });
+      res.send(arr);
+    })
+    .catch(error=>{
+      res.send(error);
+    });
+
+};
+
+/*/park*/
+function Park (data){
+  this.name=data.fullName;
+  this.address=`${data.addresses[0].postalCode}, ${data.addresses[0].city}, ${data.addresses[0].stateCode}, ${data.addresses[0].line1}`;
+  // this.address=Object.values(data.addresses[0]);
+  this.fee=data.entranceFees[0].cost;
+  this.description=data.description;
+  this.url=data.url;
+}
 
 function Weather(weatherData){
+
   this.forecast=weatherData.weather.description;
   this.time=weatherData.datetime;
 }
 
 
-function Location(locData) {
+function Location(cityName,locData) {
 
 
-  this.search_query = 'Lynwood';
+  this.search_query = cityName;
   this.formatted_query = locData[0].display_name;
   this.latitude = locData[0].lat;
   this.longitude = locData[0].lon;
 
 }
 
-server.get('*',(req,res)=>{
+function notFoundHandler(req,res){
 
 
   let errObj = {
@@ -60,7 +146,7 @@ server.get('*',(req,res)=>{
     responseText: 'Sorry, something went wrong'
   };
   res.status(500).send(errObj);
-});
+};
 
 server.listen(PORT,()=>{
   console.log(`Listening on PORT ${PORT}`);
