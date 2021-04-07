@@ -13,7 +13,7 @@ server.use(cors());
 
 const PORT = process.env.PORT || 5000;
 const client = new pg.Client({ connectionString: process.env.DATABASE_URL,
-  // ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false }
 });
 
 // let app = express();
@@ -32,32 +32,6 @@ function homeHandler(req,res){
   res.send('you server is working');
 }
 
-//localhost:3030/location?city=amman
-// function locationHandler(req,res){
-//   let cityName=req.query.city;
-//   let SQL = `SELECT * FROM locations WHERE search_query = '${cityName}' ;`;
-//   client.query(SQL)
-//     .then (result=>{
-//       if(result.rows.length > 0){
-//         res.send(result.rows[0]);
-//       }else{
-
-//         let GEOCODE_API_KEY=process.env.GEOCODE_API_KEY;
-//         let LocURL=`https://us1.locationiq.com/v1/search.php?key=${GEOCODE_API_KEY}&q=${cityName}&format=json`;
-//         superagent.get(LocURL)
-//           .then(geoData=>{
-//             let gData=geoData.body;
-//             const locationData=new Location(cityName,gData);
-//             res.send(locationData);
-//           })
-//           .catch(error =>{
-//             console.error(error);
-//             res.send(error);
-//           });
-//       }
-//     });
-// }
-
 
 
 
@@ -75,6 +49,14 @@ function locationHandler(req, res) {
           .then(locationData => {
             let locData = locationData.body;
             const dataLoc = new Location(cityName, locData);
+
+            let SQL = `INSERT INTO locations (search_query,formatted_query,latitude,longitude) VALUES ($1,$2,$3,$4) RETURNING *;`;
+            let safeValues = [dataLoc.search_query, dataLoc.formatted_query, dataLoc.latitude, dataLoc.longitude];
+            client.query(SQL, safeValues)
+              .then(results => {
+                return results.rows;
+              });
+
             res.send(dataLoc);
           })
           .catch(error => {
@@ -183,14 +165,7 @@ function Location(cityName, locationData) {
   this.formatted_query = locationData[0].display_name;
   this.latitude = locationData[0].lat;
   this.longitude = locationData[0].lon;
-  {
-    let SQL = `INSERT INTO locations (search_query,formatted_query,latitude,longitude) VALUES ($1,$2,$3,$4) RETURNING *;`;
-    let safeValues = [this.search_query, this.formatted_query, this.latitude, this.longitude];
-    client.query(SQL, safeValues)
-      .then(results => {
-        return results.rows;
-      });
-  }
+
 }
 
 
